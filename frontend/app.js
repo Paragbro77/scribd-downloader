@@ -38,3 +38,20 @@ function render() {
     return `<li>${esc(it.title || it.url)} — ${esc(it.status || "?")}${it.position ? ` (#${it.position}, ~${it.position * AVG_MIN} min)` : ""} ${ok ? `<a href="${it.download_url}">Download PDF</a>` : ""} ${it.error ? `<em>${esc(it.error)}</em>` : ""}</li>`; }).join("");
 }
 render(); poll();
+// Restore history after a refresh or on a fresh browser where localStorage
+// was cleared: pull the server's view of this client's recent jobs.
+(async () => {
+  try {
+    const r = await fetch("/api/mine?client_key=" + encodeURIComponent(getKey()));
+    if (!r.ok) return;
+    const j = await r.json();
+    if (!j.jobs || !j.jobs.length) return;
+    const merged = load().slice();
+    const known = new Set(merged.map(x => x.id));
+    for (const x of j.jobs) {
+      if (known.has(x.id)) continue;
+      merged.push({ id: x.id, url: x.url, status: x.status, download_url: x.download_url, title: x.title, error: x.error, created_at: x.created_at });
+    }
+    if (merged.length > load().length) { save(merged); render(); poll(); }
+  } catch {}
+})();

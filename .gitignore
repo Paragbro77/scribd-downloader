@@ -8,3 +8,8 @@ output/
 result.json
 scribdl-py/output/
 scribdl-py/history.json
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+

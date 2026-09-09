@@ -7,3 +7,16 @@ CREATE TABLE IF NOT EXISTS jobs (
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_status_created ON jobs(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_client ON jobs(client_key, created_at);
+
+CREATE TABLE IF NOT EXISTS rate_buckets (
+  rate_key TEXT NOT NULL,
+  window_start INTEGER NOT NULL,
+  count INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (rate_key, window_start)
+);
+
+CREATE TABLE IF NOT EXISTS turnstile_tokens (
+  token_hash TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_turnstile_tokens_created ON turnstile_tokens(created_at);

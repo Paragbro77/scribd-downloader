@@ -13,6 +13,7 @@ import urllib.parse
 import requests
 
 RESULT_JSON_FALLBACK = "result.json"
+JOB_TIMEOUT_SECS = 1800  # hard stop for one main.py invocation
 
 # Vendored snapshot of nested scribdl-py (see runner/vendor/). Prefer it so the
 # GitHub Action checkout is self-contained; fall back to scribdl-py/ locally.
@@ -112,15 +113,24 @@ def resolve_pdf(result, script_dir=None):
 
 
 def run_job(api, secret, job):
+    if not isinstance(job, dict) or not job.get("id") or not job.get("url"):
+        return  # malformed job payload: skip instead of crashing the loop
     script = main_script()
     script_dir = os.path.dirname(os.path.abspath(script))
+    started_at = time.time()
     cmd = [sys.executable, script,
            "--url", job["url"],
            "--pages", job.get("pages") or "all",
            "--scale", str(job.get("scale", 2)),
            "--delay", str(job.get("delay", 0.5)),
            "--non-interactive", "--job-id", job["id"], "--quiet"]
-    r = subprocess.run(cmd, capture_output=True, text=True, cwd=script_dir)
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True,
+                           cwd=script_dir, timeout=JOB_TIMEOUT_SECS)
+    except subprocess.TimeoutExpired:
+        api_post(api, secret, "/api/internal/fail",
+                 {"id": job["id"], "error": "job_timeout"})
+        return
     if r.returncode != 0:
         api_post(api, secret, "/api/internal/fail",
                  {"id": job["id"], "error": "private_or_no_pages"})
@@ -138,7 +148,8 @@ def run_job(api, secret, job):
                  {"id": job["id"], "error": f"bad_result_json: {e}"})
         return
     pdf = resolve_pdf(result, script_dir)
-    if pdf is None:
+    if pdf is None or os.path.getmtime(pdf) < started_at - 5:
+        # Refuse stale artifacts from earlier jobs in this workspace.
         api_post(api, secret, "/api/internal/fail",
                  {"id": job["id"], "error": "no_pdf"})
         return
@@ -190,6 +201,10 @@ def main():
             job = data.get("job")
             if not job:
                 time.sleep(60)
+                continue
+            if not isinstance(job, dict) or not job.get("id") or not job.get("url"):
+                # Response schema violation: back off instead of hot-looping.
+                time.sleep(30)
                 continue
             job_id_holder["id"] = job["id"]
             try:

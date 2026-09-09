@@ -1,13 +1,44 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Scribd to PDF</title><link rel="stylesheet" href="styles.css">
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script></head>
-<body><main>
-<h1>Scribd to PDF</h1>
-<form id="f"><input id="url" placeholder="https://www.scribd.com/document/..." required>
-<input id="pages" placeholder="all" value="all">
-<select id="scale"><option value="1">SD</option><option value="2" selected>HD</option></select>
-<div class="cf-turnstile" data-sitekey="REPLACE_ME"></div>
-<button>Get PDF</button></form>
-<p id="msg"></p><ul id="mine"></ul>
-<footer>Personal archival only. Respect Scribd ToS. Links work 7 days / 20 downloads.</footer>
-</main><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Queue a personal archival PDF export for a Scribd document you can access.">
+  <title>Scribd to PDF</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Personal archival export</p>
+      <h1>Scribd to PDF</h1>
+      <p>Only export documents you have legal access to and are authorized to save.</p>
+    </header>
+    <form id="f">
+      <label for="url">Document URL</label>
+      <input id="url" name="url" type="url" placeholder="https://www.scribd.com/document/..." autocomplete="url" required>
+      <div class="row">
+        <label for="pages">Pages</label>
+        <input id="pages" name="pages" value="all" placeholder="all, 3, or 1-10" autocomplete="off">
+      </div>
+      <div class="row">
+        <label for="scale">Quality</label>
+        <select id="scale" name="scale"><option value="1">SD</option><option value="2" selected>HD</option></select>
+      </div>
+      <!-- TODO: re-enable when the Turnstile widget is provisioned:
+      <div id="turnstile" class="cf-turnstile" data-sitekey="SITEKEY" data-action="pdf-submit" aria-label="Security check"></div>
+      -->
+      <div id="turnstile-slot"></div>
+      <button id="submit" type="submit">Get PDF</button>
+    </form>
+    <p id="msg" role="status" aria-live="polite"></p>
+    <section aria-labelledby="mine-heading">
+      <h2 id="mine-heading">My files</h2>
+      <ul id="mine"></ul>
+    </section>
+    <footer>Links are provided through pigeon.zip and normally work for 7 days or 20 downloads. Respect Scribd ToS and document owners' rights.</footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

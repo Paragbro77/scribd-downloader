@@ -1,7 +1,14 @@
 name = "scribd-queue"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
+
+[assets]
+directory = "../frontend"
+
+[vars]
+ALLOWED_ORIGIN = "https://scribd-queue.akatwdao.workers.dev"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "scribd-queue"
-database_id = "REPLACE_AFTER_CREATE"
+database_id = "f7a49a04-c4bf-48fe-b742-689c908a3579"

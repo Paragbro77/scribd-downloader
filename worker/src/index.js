@@ -96,28 +96,38 @@ async function handlePostJobs(request, env) {
     }
   }
 
-  // Turnstile verify (fail closed).
+  // Turnstile verify (fail closed when enabled). While TURNSTILE_SECRET is not
+  // configured (widget not provisioned yet), submissions are allowed without a
+  // token; as soon as the secret is set, every request must carry a valid one.
   const ip = request.headers.get("CF-Connecting-IP") || "";
-  let tsOk = false;
-  try {
-    const resp = await fetch(
-      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          secret: env.TURNSTILE_SECRET,
-          response: body.turnstileToken,
-          remoteip: ip,
-        }),
+  const token = typeof body.turnstileToken === "string" ? body.turnstileToken.trim() : "";
+  if (env.TURNSTILE_SECRET) {
+    if (!token) return json({ error: "missing turnstile token" }, 400);
+    let tsOk = false;
+    try {
+      const form = new URLSearchParams();
+      form.set("secret", env.TURNSTILE_SECRET);
+      form.set("response", token);
+      form.set("remoteip", ip);
+      const resp = await fetch(
+        "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+        { method: "POST", body: form }
+      );
+      const data = await resp.json();
+      if (data && data.success === true) {
+        // Reject tokens minted for another site or another widget action.
+        const allowedHost = env.ALLOWED_ORIGIN
+          ? new URL(env.ALLOWED_ORIGIN).hostname.toLowerCase()
+          : "";
+        const hostOk = !allowedHost || String(data.hostname || "").toLowerCase() === allowedHost;
+        const actionOk = !data.action || data.action === "pdf-submit";
+        tsOk = hostOk && actionOk;
       }
-    );
-    const data = await resp.json();
-    tsOk = data && data.success === true;
-  } catch {
-    tsOk = false;
+    } catch {
+      tsOk = false;
+    }
+    if (!tsOk) return json({ error: "turnstile failed" }, 403);
   }
-  if (!tsOk) return json({ error: "turnstile failed" }, 403);
 
   // Rate limit: max 10 jobs per client_key per 24h.
   const key =

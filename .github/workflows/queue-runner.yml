@@ -20,12 +20,25 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r runner/requirements-runner.txt
+      - name: Install system deps for obscura (best effort)
+        run: python -m playwright install-deps chromium || true
       - name: Install obscura
         run: |
-          curl -fsSL -o obscura https://github.com/obscura-headless/obscura/releases/latest/download/obscura-linux-x64
-          chmod +x obscura
-          ./obscura serve --port 9222 --stealth &
-          sleep 3
+          curl -fsSL -o /tmp/obscura.tar.gz https://github.com/h4ckf0r0day/obscura/releases/download/v0.2.2/obscura-x86_64-linux-stealth.tar.gz
+          mkdir -p /tmp/obscura-bin && tar -xzf /tmp/obscura.tar.gz -C /tmp/obscura-bin
+          OBSCURA=$(find /tmp/obscura-bin -type f -name obscura | head -1)
+          test -n "$OBSCURA"
+          chmod +x "$OBSCURA"
+          cp "$OBSCURA" /usr/local/bin/obscura
+          obscura serve --port 9222 --stealth --quiet &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9222/json/version >/dev/null 2>&1; then
+              echo "obscura CDP ready"
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:9222/json/version
       - name: Drain queue
         env:
           API_BASE: "${{ secrets.WORKER_API_BASE }}"
@@ -35,6 +48,14 @@ jobs:
         if: always()
         env:
           GH_PAT: "${{ secrets.GH_PAT }}"
+          WORKER_API_BASE: "${{ secrets.WORKER_API_BASE }}"
+          CALLBACK_SECRET: "${{ secrets.CALLBACK_SECRET }}"
         run: |
-          LEFT=$(curl -fsS -H "Authorization: Bearer ${{ secrets.CALLBACK_SECRET }}" "${{ secrets.WORKER_API_BASE }}/api/internal/pending-count" | python3 -c "import sys,json;print(json.load(sys.stdin).get('pending',1))")
-          if [ "$LEFT" != "0" ]; then curl -fsS -X POST -H "Authorization: Bearer $GH_PAT" -H Accept:application/vnd.github+json https://api.github.com/repos/${{ github.repository }}/actions/workflows/queue-runner.yml/dispatches -d '{"ref":"main"}'; fi
+          LEFT=$(curl -fsS -H "Authorization: Bearer $CALLBACK_SECRET" "$WORKER_API_BASE/api/internal/pending-count" | python3 -c "import sys,json;print(json.load(sys.stdin).get('pending',1))")
+          if [ "$LEFT" != "0" ]; then
+            curl -fsS -X POST \
+              -H "Authorization: Bearer $GH_PAT" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/queue-runner.yml/dispatches" \
+              -d "{\"ref\":\"${{ github.ref_name }}\"}"
+          fi
