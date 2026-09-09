@@ -128,7 +128,7 @@ async function handlePostJobs(request, env) {
   const cnt = await env.DB.prepare(
     "SELECT COUNT(*) AS n FROM jobs WHERE client_key = ? AND created_at > ?"
   ).bind(key, dayAgo).first();
-  if ((cnt?.n || 0) > 10) {
+  if ((cnt?.n || 0) >= 10) {
     return json({ error: "rate limited" }, 429);
   }
 
