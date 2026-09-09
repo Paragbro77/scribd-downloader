@@ -18,20 +18,23 @@ async function poll() {
   if (timer) return;
   const tick = async () => {
     if (document.hidden) return;
-    for (const it of load()) {
+    const items = load();
+    for (const it of items) {
       const r = await fetch("/api/jobs?id=" + it.id); const j = await r.json();
       it.status = j.status; it.position = j.position; it.download_url = j.download_url; it.title = j.title; it.error = j.error;
     }
-    save(load()); render();
-    const waiting = load().filter(x => x.status === "queued" || x.status === "doing").length;
-    const maxPos = Math.max(0, ...load().map(x => x.position || 0));
+    save(items); render();
+    const waiting = items.filter(x => x.status === "queued" || x.status === "doing").length;
+    const maxPos = Math.max(0, ...items.map(x => x.position || 0));
     clearInterval(timer); timer = null;
     if (waiting) { const wait = maxPos > 20 ? 90000 : 45000; timer = setInterval(async () => { clearInterval(timer); timer = null; poll(); }, wait); }
   };
   tick();
 }
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function render() {
-  mine.innerHTML = load().slice().reverse().map(it =>
-    `<li>${it.title || it.url} — ${it.status || "?"}${it.position ? ` (#${it.position}, ~${it.position * AVG_MIN} min)` : ""} ${it.download_url ? `<a href="${it.download_url}">Download PDF</a>` : ""} ${it.error ? `<em>${it.error}</em>` : ""}</li>`).join("");
+  mine.innerHTML = load().slice().reverse().map(it => {
+    const ok = typeof it.download_url === "string" && it.download_url.startsWith("https://pigeon.zip/");
+    return `<li>${esc(it.title || it.url)} — ${esc(it.status || "?")}${it.position ? ` (#${it.position}, ~${it.position * AVG_MIN} min)` : ""} ${ok ? `<a href="${it.download_url}">Download PDF</a>` : ""} ${it.error ? `<em>${esc(it.error)}</em>` : ""}</li>`; }).join("");
 }
 render(); poll();
