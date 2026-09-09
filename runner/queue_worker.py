@@ -62,6 +62,20 @@ def newest_pdf():
     return max(pdfs, key=os.path.getmtime)
 
 
+def resolve_pdf(result):
+    """Prefer result["filename"] written by main.py; fall back to newest-glob."""
+    filename = result.get("filename")
+    if filename:
+        if os.path.exists(filename):
+            return filename
+        for cand in (os.path.join("scribdl-py", "output", filename),
+                     os.path.join("scribdl-py", "output",
+                                  os.path.basename(filename))):
+            if os.path.exists(cand):
+                return cand
+    return newest_pdf()
+
+
 def run_job(api, secret, job):
     cmd = [sys.executable, os.path.join("scribdl-py", "main.py"),
            "--url", job["url"],
@@ -86,7 +100,7 @@ def run_job(api, secret, job):
         api_post(api, secret, "/api/internal/fail",
                  {"id": job["id"], "error": f"bad_result_json: {e}"})
         return
-    pdf = newest_pdf()
+    pdf = resolve_pdf(result)
     if pdf is None:
         api_post(api, secret, "/api/internal/fail",
                  {"id": job["id"], "error": "no_pdf"})
