@@ -1,4 +1,4 @@
-"""Queue worker loop: poll internal API, run scribdl-py/main.py, upload to pigeon."""
+"""Queue worker loop: poll internal API, run vendored main.py, upload to pigeon."""
 import argparse
 import glob
 import json
@@ -13,6 +13,20 @@ import urllib.parse
 import requests
 
 RESULT_JSON_FALLBACK = "result.json"
+
+# Vendored snapshot of nested scribdl-py (see runner/vendor/). Prefer it so the
+# GitHub Action checkout is self-contained; fall back to scribdl-py/ locally.
+VENDOR_MAIN = os.path.join("runner", "vendor", "main.py")
+LEGACY_MAIN = os.path.join("scribdl-py", "main.py")
+OUTPUT_DIRS = ("output",
+               os.path.join("runner", "vendor", "output"),
+               os.path.join("scribdl-py", "output"))
+
+
+def main_script():
+    if os.path.exists(VENDOR_MAIN):
+        return VENDOR_MAIN
+    return LEGACY_MAIN
 
 
 def parse_pigeon_response(shell):
@@ -45,50 +59,73 @@ def api_post(api, secret, path, payload):
                          headers=headers(secret), timeout=30)
 
 
-def find_result_json():
+def find_result_json(script_dir=None):
     """result.json lands beside the output PDF (output/ dir), not CWD."""
-    candidates = glob.glob(os.path.join("scribdl-py", "output", "result.json"))
-    if candidates:
-        return candidates[0]
+    dirs = list(OUTPUT_DIRS)
+    if script_dir:
+        # main.py runs with cwd=script_dir, so its writes land here first
+        dirs.insert(0, os.path.join(script_dir, "output"))
+    for out_dir in dirs:
+        candidate = os.path.join(out_dir, "result.json")
+        if os.path.exists(candidate):
+            return candidate
     if os.path.exists(RESULT_JSON_FALLBACK):
         return RESULT_JSON_FALLBACK
+    if script_dir:
+        fallback = os.path.join(script_dir, "result.json")
+        if os.path.exists(fallback):
+            return fallback
     return None
 
 
-def newest_pdf():
-    pdfs = glob.glob(os.path.join("scribdl-py", "output", "*.pdf"))
+def newest_pdf(script_dir=None):
+    pdfs = []
+    dirs = list(OUTPUT_DIRS)
+    if script_dir:
+        dirs.insert(0, os.path.join(script_dir, "output"))
+    for out_dir in dirs:
+        pdfs.extend(glob.glob(os.path.join(out_dir, "*.pdf")))
     if not pdfs:
         return None
     return max(pdfs, key=os.path.getmtime)
 
 
-def resolve_pdf(result):
+def resolve_pdf(result, script_dir=None):
     """Prefer result["filename"] written by main.py; fall back to newest-glob."""
     filename = result.get("filename")
     if filename:
         if os.path.exists(filename):
             return filename
-        for cand in (os.path.join("scribdl-py", "output", filename),
-                     os.path.join("scribdl-py", "output",
-                                  os.path.basename(filename))):
+        candidates = []
+        if script_dir:
+            # filename is relative to main.py's cwd (script_dir)
+            candidates.append(os.path.join(script_dir, filename))
+            candidates.append(os.path.join(script_dir,
+                                           os.path.basename(filename)))
+        candidates.extend(os.path.join(out_dir, filename) for out_dir in OUTPUT_DIRS)
+        candidates.extend(os.path.join(out_dir, os.path.basename(filename))
+                          for out_dir in OUTPUT_DIRS)
+        for cand in candidates:
             if os.path.exists(cand):
                 return cand
-    return newest_pdf()
+    return newest_pdf(script_dir)
 
 
 def run_job(api, secret, job):
-    cmd = [sys.executable, os.path.join("scribdl-py", "main.py"),
+    script = main_script()
+    script_dir = os.path.dirname(os.path.abspath(script))
+    cmd = [sys.executable, script,
            "--url", job["url"],
            "--pages", job.get("pages") or "all",
            "--scale", str(job.get("scale", 2)),
            "--delay", str(job.get("delay", 0.5)),
            "--non-interactive", "--job-id", job["id"], "--quiet"]
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    r = subprocess.run(cmd, capture_output=True, text=True, cwd=script_dir)
     if r.returncode != 0:
         api_post(api, secret, "/api/internal/fail",
                  {"id": job["id"], "error": "private_or_no_pages"})
         return
-    result_path = find_result_json()
+    result_path = find_result_json(script_dir)
     if result_path is None:
         api_post(api, secret, "/api/internal/fail",
                  {"id": job["id"], "error": "no_result_json"})
@@ -100,7 +137,7 @@ def run_job(api, secret, job):
         api_post(api, secret, "/api/internal/fail",
                  {"id": job["id"], "error": f"bad_result_json: {e}"})
         return
-    pdf = resolve_pdf(result)
+    pdf = resolve_pdf(result, script_dir)
     if pdf is None:
         api_post(api, secret, "/api/internal/fail",
                  {"id": job["id"], "error": "no_pdf"})
