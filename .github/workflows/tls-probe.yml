@@ -45,7 +45,26 @@ jobs:
               except Exception as e:
                   print(f"{imp}: ERROR {str(e)[:250]}")
           EOF
-      - name: Also try plain requests (baseline)
+      - name: CDN image + jsonp from datacenter IP
+        run: |
+          python - <<'EOF'
+          import requests
+          H = {"User-Agent": "Mozilla/5.0",
+               "Referer": "https://www.scribd.com/",
+               "Origin": "https://scribd-queue.akatwdao.workers.dev"}
+          for label, url in (
+              ("image", "https://html.scribdassets.com/1p4o42l6yo9j5v1j/images/1-b6a1c638fa.jpg"),
+              ("jsonp", "https://html.scribdassets.com/1p4o42l6yo9j5v1j/pages/4-52a0ee882a.jsonp"),
+          ):
+              try:
+                  r = requests.get(url, timeout=45, headers=H)
+                  print(f"{label}: status={r.status_code} len={len(r.content)} "
+                        f"ACAO={r.headers.get('access-control-allow-origin')} "
+                        f"ctype={r.headers.get('content-type')}")
+              except Exception as e:
+                  print(f"{label}: ERROR {str(e)[:250]}")
+          EOF
+      - name: Plain requests embed baseline (datacenter IP)
         env:
           SCRIBD_ACCESS_KEY: ${{ secrets.SCRIBD_ACCESS_KEY }}
           DOC_ID: ${{ inputs.doc_id }}
