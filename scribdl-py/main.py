@@ -432,5 +432,8 @@ def main(url, file, threads, output, pages, delay, scale, quiet, url_opt=None, n
     if is_batch_mode and not quiet:
         print(f"\n[✓] Batch complete: {successful}/{total} documents downloaded successfully.")
 
+    if successful == 0:
+        sys.exit(1)
+
 if __name__ == "__main__":
     main()

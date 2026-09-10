@@ -141,8 +141,10 @@ def run_job(api, secret, job):
         return
     result_path = find_result_json(script_dir)
     if result_path is None:
+        tail = (r.stdout or r.stderr or "").strip().splitlines()[-3:]
+        detail = " | ".join(t.strip() for t in tail)[-400:] or "no_output"
         api_post(api, secret, "/api/internal/fail",
-                 {"id": job["id"], "error": "no_result_json"})
+                 {"id": job["id"], "error": f"no_result_json: {detail}"})
         return
     try:
         with open(result_path) as f:
