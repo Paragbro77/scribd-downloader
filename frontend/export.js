@@ -88,26 +88,58 @@ export async function exportScribdPdf(input, selection, onProgress) {
   const docId = extractDocId(input);
   if (!docId) throw new Error("not a scribd document url");
   onProgress?.(0.02, "loading manifest…");
-  // Same-origin raw HTML: no CORS gate on our side, and the challenge
-  // decision is made by Scribd against the visitor's own network — the same
-  // network where they can open the document in a tab right now.
-  const res = await fetch(`/api/manifest-html/${docId}`, {
-    headers: { Accept: "text/html" },
-  });
-  const html = await res.text();
-  if (!res.ok) {
-    let detail = {};
-    try { detail = JSON.parse(html); } catch { /* raw challenge bytes */ }
-    throw new Error(
-      detail.fallback === "queue"
-        ? "instant export is warming up — try the queue below"
-        : detail.error || "could not read document info"
-    );
+
+  // Manifest acquisition, two paths:
+  //  1. Relay (preferred): /api/manifest/<docId> returns parsed JSON via the
+  //     residential relay (env.MANIFEST_RELAY). 503 => not configured.
+  //  2. Direct: /api/manifest-html/<docId> returns raw embed HTML fetched by
+  //     the Worker with the visitor's own UA. Only works on networks Scribd
+  //     doesn't challenge (residential); challenge => fail honestly.
+  let man = null;
+  try {
+    const res = await fetch(`/api/manifest/${docId}`, {
+      headers: { Accept: "application/json" },
+    });
+    if (res.ok) {
+      const j = await res.json();
+      man = {
+        title: String(j.title || ""),
+        pageCount: Number(j.page_count) || 0,
+        inline: new Map(
+          Object.entries(j.inline || {}).map(([k, v]) => [Number(k), String(v)])
+        ),
+        jsonpUrls: (j.jsonp_urls || []).map(String),
+      };
+    } else if (res.status !== 503 && res.status !== 502) {
+      let detail = {};
+      try { detail = await res.json(); } catch { /* ignore */ }
+      if (detail.fallback !== "queue") {
+        throw new Error(detail.error || "could not read document info");
+      }
+    }
+  } catch (e) {
+    if (e instanceof TypeError) throw new Error("network error loading manifest");
+    if (e.message && e.message !== "network error loading manifest") throw e;
   }
-  if (/Client Challenge/i.test(html) && !/page_count/.test(html)) {
-    throw new Error("scribd challenged this network — try the queue below");
+  if (!man) {
+    const res = await fetch(`/api/manifest-html/${docId}`, {
+      headers: { Accept: "text/html" },
+    });
+    const html = await res.text();
+    if (!res.ok) {
+      let detail = {};
+      try { detail = JSON.parse(html); } catch { /* raw challenge bytes */ }
+      throw new Error(
+        detail.fallback === "queue"
+          ? "instant export is warming up — try the queue below"
+          : detail.error || "could not read document info"
+      );
+    }
+    if (/Client Challenge/i.test(html) && !/page_count/.test(html)) {
+      throw new Error("scribd challenged this network — try the queue below");
+    }
+    man = extractManifest(html);
   }
-  const man = extractManifest(html);
   if (!man.pageCount) throw new Error("could not read document info");
 
   // Resolve page -> image url: inline 1..3 first.

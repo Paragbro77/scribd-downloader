@@ -9,6 +9,16 @@ import {
 
 const now = () => Math.floor(Date.now() / 1000);
 
+// Cheap same-origin health check used by CI/live checks.
+function handleHealth(env) {
+  return json({
+    ok: true,
+    manifestRelay: Boolean(env.MANIFEST_RELAY),
+    accessKey: Boolean(env.SCRIBD_ACCESS_KEY),
+    turnstile: Boolean(env.TURNSTILE_SECRET),
+  });
+}
+
 function json(data, status = 200, cors = false) {
   const headers = { "Content-Type": "application/json" };
   if (cors) headers["Access-Control-Allow-Origin"] = "*";
@@ -289,6 +299,9 @@ async function handleInternalNext(env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === "/api/health") {
+      return handleHealth(env);
+    }
     // Same-origin relay: the visitor's browser asks US for the manifest HTML
     // (www.scribd.com sends no ACAO header, so the browser can't fetch it
     // directly). Forward raw bytes with the visitor's own UA; residential

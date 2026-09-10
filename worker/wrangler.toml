@@ -1,17 +1,23 @@
 name = "scribd-queue"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
+account_id = "e532a595bf8bef8581d6562d2e2cf61c"
 
 [assets]
 directory = "../frontend"
 
 [vars]
-ALLOWED_ORIGIN = "https://scribd-queue.akatwdao.workers.dev"
-# Residential manifest relay (Render free web service, see relay/ + render.yaml).
-# Empty until deployed: /api/manifest/* then answers 503 with fallback:'queue'.
-MANIFEST_RELAY = ""
+# Live URL of this same worker (workers.dev subdomain of the owning account).
+ALLOWED_ORIGIN = "https://scribd-queue.ytvideo.workers.dev"
+# Residential manifest relay. Two supported modes:
+#   1. cloudflared quick tunnel -> relay/app.py run locally (residential egress,
+#      proves the pipeline; URL changes on restart) — this is the current value.
+#   2. Render free service (render.yaml) — datacenter egress, Scribd-challenged,
+#      kept as documented fallback only.
+MANIFEST_RELAY = "https://mobility-television-console-stainless.trycloudflare.com"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "scribd-queue"
-database_id = "f7a49a04-c4bf-48fe-b742-689c908a3579"
+database_id = "80fb7c3a-c926-4122-9baa-04df67b581e9"
+
