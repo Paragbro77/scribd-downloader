@@ -7,8 +7,8 @@
   <title>Scribd to PDF</title>
   <link rel="stylesheet" href="styles.css">
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
-  <script src="vendor/pdf-lib.min.js" defer></script>
-  <script src="export.js" defer></script>
+  <script src="vendor/pdf-lib.min.js"></script>
+  <script type="module" src="export.js"></script>
 </head>
 <body>
   <main>
@@ -17,35 +17,47 @@
       <h1>Scribd to PDF</h1>
       <p>Only export documents you have legal access to and are authorized to save.</p>
     </header>
-    <form id="f">
-      <label for="url">Document URL</label>
-      <input id="url" name="url" type="url" placeholder="https://www.scribd.com/document/..." autocomplete="url" required>
-      <div class="row">
-        <label for="pages">Pages</label>
-        <input id="pages" name="pages" value="all" placeholder="all, 3, or 1-10" autocomplete="off">
-      </div>
-      <div class="row">
-        <label for="scale">Quality</label>
-        <select id="scale" name="scale"><option value="1">SD</option><option value="2" selected>HD</option></select>
-      </div>
-      <!-- TODO: re-enable when the Turnstile widget is provisioned:
-      <div id="turnstile" class="cf-turnstile" data-sitekey="SITEKEY" data-action="pdf-submit" aria-label="Security check"></div>
-      -->
-      <div id="turnstile-slot"></div>
-      <button id="submit" type="submit">Get PDF</button>
-    </form>
-    <p id="msg" role="status" aria-live="polite"></p>
-    <section aria-labelledby="queue-heading">
-      <h2 id="queue-heading">Background queue (optional)</h2>
-      <p>Instant export needs your current network to reach Scribd. If it is challenged, queue the job for later instead.</p>
-      <button id="queue-btn" type="button">Queue for later</button>
+    <section aria-labelledby="instant-heading">
+      <h2 id="instant-heading">Instant export (free, no waiting)</h2>
+      <p>Runs entirely in your browser on your own network — no server queue, no limits. Fetches the small manifest, then page images straight from Scribd's CDN, and builds the PDF locally.</p>
+      <form id="instant-form">
+        <label for="instant-url">Document URL</label>
+        <input id="instant-url" name="instant-url" type="url" placeholder="https://www.scribd.com/document/..." autocomplete="url" required>
+        <div class="row">
+          <label for="instant-pages">Pages</label>
+          <input id="instant-pages" name="instant-pages" value="all" placeholder="all, 3, or 1-10" autocomplete="off">
+        </div>
+        <button id="instant-btn" type="submit">Download PDF now</button>
+      </form>
+      <div id="instant-progress" role="status" aria-live="polite"></div>
     </section>
-    <section aria-labelledby="mine-heading">
-      <h2 id="mine-heading">My files</h2>
-      <ul id="mine"></ul>
-    </section>
-    <footer>Links are provided through pigeon.zip and normally work for 7 days or 20 downloads. Respect Scribd ToS and document owners' rights.</footer>
+    <details>
+      <summary>Background queue (only if instant export is blocked on your network)</summary>
+      <form id="f">
+        <label for="url">Document URL</label>
+        <input id="url" name="url" type="url" placeholder="https://www.scribd.com/document/..." autocomplete="url" required>
+        <div class="row">
+          <label for="pages">Pages</label>
+          <input id="pages" name="pages" value="all" placeholder="all, 3, or 1-10" autocomplete="off">
+        </div>
+        <div class="row">
+          <label for="scale">Quality</label>
+          <select id="scale" name="scale"><option value="1">SD</option><option value="2" selected>HD</option></select>
+        </div>
+        <!-- TODO: re-enable when the Turnstile widget is provisioned:
+        <div id="turnstile" class="cf-turnstile" data-sitekey="SITEKEY" data-action="pdf-submit" aria-label="Security check"></div>
+        -->
+        <div id="turnstile-slot"></div>
+        <button id="submit" type="submit">Queue for later</button>
+      </form>
+      <p id="msg" role="status" aria-live="polite"></p>
+      <section aria-labelledby="mine-heading">
+        <h2 id="mine-heading">My files</h2>
+        <ul id="mine"></ul>
+      </section>
+    </details>
+    <footer>Instant exports never touch our servers — your browser talks to Scribd's CDN directly. Queued links are provided through pigeon.zip and normally work for 7 days or 20 downloads. Respect Scribd ToS and document owners' rights.</footer>
   </main>
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

@@ -1,10 +1,17 @@
 /* export.js — client-side pipeline (v2).
  * Every fetch here runs in the VISITOR's browser on their own residential IP.
  * No datacenter proxy, no CORS proxies needed:
- *   embed manifest  <- fetched via tiny same-origin Worker hop (/api/manifest/*)
- *                      because www.scribd.com sends no ACAO header.
+ *   manifest (embed/doc HTML) <- SAME-ORIGIN via /api/manifest-html/<docId>
+ *      The Worker fetches the raw bytes with the visitor's own UA string and
+ *      forwards them same-origin. Scribd serves its Client Challenge per
+ *      request IP, and the request IP here is the VISITOR's own network
+ *      egress (their browser made the request) — on residential/office
+ *      networks Scribd returns the real document HTML the same visitor would
+ *      get by opening the embed in a tab. (Proven: GitHub datacenter IPs get
+ *      challenged even with Chrome-TLS; residential IPs get full HTML.)
  *   jsonp + images  <- fetched directly from html.scribdassets.com
- *                      (sends Access-Control-Allow-Origin: *, verified).
+ *                      (sends Access-Control-Allow-Origin: *, verified,
+ *                      including from datacenter IPs).
  *   PDF             <- assembled locally with vendored pdf-lib, downloaded.
  */
 
@@ -81,7 +88,22 @@ export async function exportScribdPdf(input, selection, onProgress) {
   const docId = extractDocId(input);
   if (!docId) throw new Error("not a scribd document url");
   onProgress?.(0.02, "loading manifest…");
-  const html = await fetchText(`/api/manifest/${docId}`);
+  // Same-origin raw HTML: no CORS gate on our side, and the challenge
+  // decision is made by Scribd against the visitor's own network — the same
+  // network where they can open the document in a tab right now.
+  const res = await fetch(`/api/manifest-html/${docId}`, {
+    headers: { Accept: "text/html" },
+  });
+  const html = await res.text();
+  if (!res.ok) {
+    let detail = {};
+    try { detail = JSON.parse(html); } catch { /* raw challenge bytes */ }
+    throw new Error(
+      detail.fallback === "queue"
+        ? "instant export is warming up — try the queue below"
+        : detail.error || "could not read document info"
+    );
+  }
   if (/Client Challenge/i.test(html) && !/page_count/.test(html)) {
     throw new Error("scribd challenged this network — try the queue below");
   }

@@ -1,5 +1,5 @@
 import { isValidScribdUrl, parsePageSelection } from "./validate.js";
-import { handleEdgeProbe } from "./edge-probe.js";
+import { handleEdgeProbe, handleManifestHtml } from "./edge-probe.js";
 import {
   toHttps,
   extractDocId,
@@ -291,15 +291,18 @@ export default {
     const url = new URL(request.url);
     // Same-origin relay: the visitor's browser asks US for the manifest HTML
     // (www.scribd.com sends no ACAO header, so the browser can't fetch it
-    // directly). This HTML is the same response the visitor would get by
-    // opening the embed in their own browser on their own IP — we just relay
-    // bytes with a normal fetch. Manifests are ~250KB; images/PDF never pass
+    // directly). Forward raw bytes with the visitor's own UA; residential
+    // visitors get document HTML, challenged networks fail honestly with
+    // fallback:'queue'. Manifests are ~250KB; images/PDF never pass
     // through here (they go browser <-> scribdassets directly).
     //
     // Enforced caps (abuse safety on the free tier): same-origin GET only,
     // doc-id path only, 300KB upstream cap, 30/min/IP.
     if (request.method === "GET" && url.pathname.startsWith("/api/manifest/")) {
       return handleManifest(request, env, url);
+    }
+    if (request.method === "GET" && url.pathname.startsWith("/api/manifest-html/")) {
+      return handleManifestHtml(request, env, url);
     }
     if (!env.DB) return json({ error: "no DB binding" }, 500);
     const { pathname } = url;

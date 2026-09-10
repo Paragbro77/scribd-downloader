@@ -1,3 +1,34 @@
+/* Instant export: browser -> same-origin manifest hop -> CDN images -> local PDF. */
+document.getElementById("instant-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById("instant-btn");
+  const prog = document.getElementById("instant-progress");
+  const say = (frac, label) => {
+    const pct = Math.round(frac * 100);
+    prog.textContent = `${pct}% — ${label}`;
+  };
+  btn.disabled = true;
+  try {
+    const { exportScribdPdf } = await import("./export.js");
+    const url = document.getElementById("instant-url").value;
+    const pages = document.getElementById("instant-pages").value || "all";
+    say(0.01, "starting…");
+    const { bytes, filename, pages: n, total } = await exportScribdPdf(url, pages, say);
+    const blob = new Blob([bytes], { type: "application/pdf" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 5000);
+    say(1, `done — ${n}/${total} pages saved as ${filename}`);
+  } catch (err) {
+    prog.textContent = `Export failed: ${err.message || err}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 const KEY = "scribd_jobs";
 const AVG_MIN = 4;
 const load = () => JSON.parse(localStorage.getItem(KEY) || "[]");

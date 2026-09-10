@@ -63,3 +63,14 @@ export function imageUrlFromJsonp(body) {
   const m = ORIG_RE.exec(String(body ?? ""));
   return m ? toHttps(m[1]) : null;
 }
+
+const manifestHits = new Map(); // ip -> [timestamps]; 30/min cap (per isolate)
+
+export function manifestRateOk(ip) {
+  const t = Math.floor(Date.now() / 1000);
+  const arr = (manifestHits.get(ip) || []).filter((x) => x > t - 60);
+  arr.push(t);
+  manifestHits.set(ip, arr);
+  return arr.length <= 30;
+}
+
