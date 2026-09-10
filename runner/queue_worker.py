@@ -132,8 +132,10 @@ def run_job(api, secret, job):
                  {"id": job["id"], "error": "job_timeout"})
         return
     if r.returncode != 0:
+        tail = (r.stderr or r.stdout or "").strip().splitlines()[-3:]
+        detail = " | ".join(t.strip() for t in tail)[-400:] or "no_output"
         api_post(api, secret, "/api/internal/fail",
-                 {"id": job["id"], "error": "private_or_no_pages"})
+                 {"id": job["id"], "error": f"exit_{r.returncode}: {detail}"})
         return
     result_path = find_result_json(script_dir)
     if result_path is None:

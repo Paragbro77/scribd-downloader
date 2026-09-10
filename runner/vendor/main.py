@@ -9,7 +9,11 @@ import json
 import tempfile
 import atexit
 from datetime import datetime
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import (
+    sync_playwright,
+    TimeoutError as PlaywrightTimeoutError,
+    Error as PlaywrightError,
+)
 
 def load_config():
     config = configparser.ConfigParser()
@@ -122,9 +126,16 @@ def process_download(url, output, pages, delay, scale, quiet, is_batch=False, th
         )
 
         page = context.new_page()
-        try:
-            page.goto(embed_url, wait_until="domcontentloaded", timeout=60000)
-        except PlaywrightTimeoutError:
+        nav_ok = False
+        for attempt in range(3):
+            try:
+                page.goto(embed_url, wait_until="domcontentloaded", timeout=60000)
+                nav_ok = True
+                break
+            except (PlaywrightTimeoutError, PlaywrightError):
+                print(f"Error: Navigation failed for {url} (attempt {attempt + 1}/3). Retrying...")
+                time.sleep(5)
+        if not nav_ok:
             print(f"Error: Connection timeout for {url}. Skipping...")
             browser.close()
             return False
