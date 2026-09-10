@@ -79,3 +79,30 @@ jobs:
           r = requests.get(EMBED, timeout=45, headers={"User-Agent": "Mozilla/5.0"})
           print(f"plain: status={r.status_code} len={len(r.content)} challenged={'Client Challenge' in r.text}")
           EOF
+      - name: CDN cookie/param probe (does the CDN gate on session?)
+        run: |
+          python - <<'EOF'
+          import requests
+          H = {"User-Agent": "Mozilla/5.0",
+               "Referer": "https://www.scribd.com/",
+               "Origin": "https://scribd-queue.akatwdao.workers.dev"}
+          IMG = "https://html.scribdassets.com/1p4o42l6yo9j5v1j/images/1-b6a1c638fa.jpg"
+          s = requests.Session()
+          r1 = s.get(IMG, timeout=45, headers=H)
+          print(f"cdn-plain: status={r1.status_code} len={len(r1.content)} "
+                f"ACAO={r1.headers.get('access-control-allow-origin')} "
+                f"ctype={r1.headers.get('content-type')} cookies={dict(s.cookies)}")
+          # same URL on a FRESH session (no cookies carried)
+          r2 = requests.get(IMG, timeout=45, headers=H)
+          print(f"cdn-fresh: status={r2.status_code} len={len(r2.content)} "
+                f"ACAO={r2.headers.get('access-control-allow-origin')} "
+                f"ctype={r2.headers.get('content-type')}")
+          # jsonp fresh vs session
+          J = "https://html.scribdassets.com/1p4o42l6yo9j5v1j/pages/4-52a0ee882a.jsonp"
+          r3 = s.get(J, timeout=45, headers=H)
+          print(f"jsonp-session: status={r3.status_code} len={len(r3.content)} "
+                f"ACAO={r3.headers.get('access-control-allow-origin')}")
+          r4 = requests.get(J, timeout=45, headers=H)
+          print(f"jsonp-fresh: status={r4.status_code} len={len(r4.content)} "
+                f"ACAO={r4.headers.get('access-control-allow-origin')}")
+          EOF
