@@ -7,6 +7,8 @@
   <title>Scribd to PDF</title>
   <link rel="stylesheet" href="styles.css">
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <script src="vendor/pdf-lib.min.js" defer></script>
+  <script src="export.js" defer></script>
 </head>
 <body>
   <main>
@@ -33,6 +35,11 @@
       <button id="submit" type="submit">Get PDF</button>
     </form>
     <p id="msg" role="status" aria-live="polite"></p>
+    <section aria-labelledby="queue-heading">
+      <h2 id="queue-heading">Background queue (optional)</h2>
+      <p>Instant export needs your current network to reach Scribd. If it is challenged, queue the job for later instead.</p>
+      <button id="queue-btn" type="button">Queue for later</button>
+    </section>
     <section aria-labelledby="mine-heading">
       <h2 id="mine-heading">My files</h2>
       <ul id="mine"></ul>

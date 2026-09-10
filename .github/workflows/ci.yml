@@ -33,3 +33,6 @@ jobs:
         with:
           node-version: "20"
       - run: node --check worker/src/index.js
+      - run: node --check worker/src/edge-probe.js
+      - run: node --check worker/src/manifest.js
+      - run: node --check frontend/export.js

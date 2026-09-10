@@ -7,6 +7,9 @@ directory = "../frontend"
 
 [vars]
 ALLOWED_ORIGIN = "https://scribd-queue.akatwdao.workers.dev"
+# Residential manifest relay (Render free web service, see relay/ + render.yaml).
+# Empty until deployed: /api/manifest/* then answers 503 with fallback:'queue'.
+MANIFEST_RELAY = ""
 
 [[d1_databases]]
 binding = "DB"

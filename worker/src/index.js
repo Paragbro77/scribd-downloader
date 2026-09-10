@@ -1,4 +1,11 @@
 import { isValidScribdUrl, parsePageSelection } from "./validate.js";
+import { handleEdgeProbe } from "./edge-probe.js";
+import {
+  toHttps,
+  extractDocId,
+  extractManifest,
+  imageUrlFromJsonp,
+} from "./manifest.js";
 
 const now = () => Math.floor(Date.now() / 1000);
 
@@ -185,6 +192,70 @@ async function handleGetJob(url, env) {
   );
 }
 
+const manifestHits = new Map(); // ip -> [timestamps]; 30/min cap (per isolate)
+
+function manifestRateOk(ip) {
+  const t = now();
+  const arr = (manifestHits.get(ip) || []).filter((x) => x > t - 60);
+  arr.push(t);
+  manifestHits.set(ip, arr);
+  return arr.length <= 30;
+}
+
+// GET /api/manifest/<docId> — same-origin relay to the residential manifest
+// service (env.MANIFEST_RELAY). The Worker never touches Scribd directly:
+// edge-ips get a Client Challenge (proven), so without a relay we fail
+// honestly with fallback:'queue' instead of returning challenge bytes.
+async function handleManifest(request, env, url) {
+  if (env.ALLOWED_ORIGIN) {
+    const host = new URL(env.ALLOWED_ORIGIN).hostname.toLowerCase();
+    let sameOrigin = false;
+    try {
+      const origin = request.headers.get("Origin") || "";
+      const referer = request.headers.get("Referer") || "";
+      if (origin) sameOrigin = new URL(origin).hostname.toLowerCase() === host;
+      else if (referer) sameOrigin = new URL(referer).hostname.toLowerCase() === host;
+    } catch {
+      sameOrigin = false;
+    }
+    if (!sameOrigin) return json({ error: "forbidden origin" }, 403);
+  }
+  const docId = url.pathname
+    .slice("/api/manifest/".length)
+    .split("/")[0]
+    .trim();
+  if (!/^\d{5,}$/.test(docId)) return json({ error: "invalid doc id" }, 400);
+  const ip = request.headers.get("CF-Connecting-IP") || "local";
+  if (!manifestRateOk(ip)) return json({ error: "rate limited" }, 429);
+  const relay = (env.MANIFEST_RELAY || "").replace(/\/$/, "");
+  if (!relay) return json({ error: "manifest relay not configured", fallback: "queue" }, 503);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 60000);
+  try {
+    const r = await fetch(`${relay}/manifest?docId=${encodeURIComponent(docId)}`, {
+      signal: ctrl.signal,
+      headers: { "User-Agent": "scribd-queue-worker/1.0" },
+    });
+    const j = await r.json();
+    if (!r.ok || !j || j.ok !== true) {
+      return json({ error: (j && j.error) || "relay failed", fallback: "queue" }, 502);
+    }
+    return json({
+      ok: true,
+      source: "relay",
+      title: j.title || "",
+      page_count: j.page_count || 0,
+      inline: j.inline || {},
+      jsonp_urls: j.jsonp_urls || [],
+    });
+  } catch {
+    return json({ error: "relay unreachable", fallback: "queue" }, 502);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+
 async function handleGetMine(url, env) {
   const key = url.searchParams.get("client_key");
   if (!key) return json({ error: "missing client_key" }, 400, true);
@@ -217,8 +288,20 @@ async function handleInternalNext(env) {
 
 export default {
   async fetch(request, env) {
-    if (!env.DB) return json({ error: "no DB binding" }, 500);
     const url = new URL(request.url);
+    // Same-origin relay: the visitor's browser asks US for the manifest HTML
+    // (www.scribd.com sends no ACAO header, so the browser can't fetch it
+    // directly). This HTML is the same response the visitor would get by
+    // opening the embed in their own browser on their own IP — we just relay
+    // bytes with a normal fetch. Manifests are ~250KB; images/PDF never pass
+    // through here (they go browser <-> scribdassets directly).
+    //
+    // Enforced caps (abuse safety on the free tier): same-origin GET only,
+    // doc-id path only, 300KB upstream cap, 30/min/IP.
+    if (request.method === "GET" && url.pathname.startsWith("/api/manifest/")) {
+      return handleManifest(request, env, url);
+    }
+    if (!env.DB) return json({ error: "no DB binding" }, 500);
     const { pathname } = url;
 
     if (request.method === "OPTIONS") {
@@ -228,6 +311,7 @@ export default {
           "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
           "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          "Access-Control-Max-Age": "86400",
         },
       });
     }
@@ -240,6 +324,17 @@ export default {
     }
     if (pathname === "/api/mine" && request.method === "GET") {
       return handleGetMine(url, env);
+    }
+    if (pathname === "/api/edge-probe" && request.method === "GET") {
+      return json(
+        await handleEdgeProbe(
+          url,
+          request.headers.get("User-Agent"),
+          env.SCRIBD_ACCESS_KEY
+        ),
+        200,
+        true
+      );
     }
 
     if (pathname === "/api/internal/pending-count" && request.method === "GET") {
