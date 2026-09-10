@@ -15,10 +15,11 @@ import requests
 RESULT_JSON_FALLBACK = "result.json"
 JOB_TIMEOUT_SECS = 1800  # hard stop for one main.py invocation
 
+RUNNER_DIR = os.path.dirname(os.path.abspath(__file__))
 # Vendored snapshot of nested scribdl-py (see runner/vendor/). Prefer it so the
 # GitHub Action checkout is self-contained; fall back to scribdl-py/ locally.
-VENDOR_MAIN = os.path.join("runner", "vendor", "main.py")
-LEGACY_MAIN = os.path.join("scribdl-py", "main.py")
+VENDOR_MAIN = os.path.join(RUNNER_DIR, "vendor", "main.py")
+LEGACY_MAIN = os.path.join(RUNNER_DIR, "..", "scribdl-py", "main.py")
 OUTPUT_DIRS = ("output",
                os.path.join("runner", "vendor", "output"),
                os.path.join("scribdl-py", "output"))
@@ -116,7 +117,8 @@ def run_job(api, secret, job):
     if not isinstance(job, dict) or not job.get("id") or not job.get("url"):
         return  # malformed job payload: skip instead of crashing the loop
     script = main_script()
-    script_dir = os.path.dirname(os.path.abspath(script))
+    script = os.path.abspath(script)  # cmd runs with cwd=script_dir, so must be absolute
+    script_dir = os.path.dirname(script)
     started_at = time.time()
     cmd = [sys.executable, script,
            "--url", job["url"],
