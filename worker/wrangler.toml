@@ -9,12 +9,10 @@ directory = "../frontend"
 [vars]
 # Live URL of this same worker (workers.dev subdomain of the owning account).
 ALLOWED_ORIGIN = "https://scribd-queue.ytvideo.workers.dev"
-# Residential manifest relay. Two supported modes:
-#   1. cloudflared quick tunnel -> relay/app.py run locally (residential egress,
-#      proves the pipeline; URL changes on restart) — this is the current value.
-#   2. Render free service (render.yaml) — datacenter egress, Scribd-challenged,
-#      kept as documented fallback only.
-MANIFEST_RELAY = "https://mobility-television-console-stainless.trycloudflare.com"
+# Residential manifest relay: intentionally NOT configured. No personal
+# machines / residential IPs are used — instant export answers 503 with
+# fallback:'queue' until a hosted (non-personal) relay exists.
+MANIFEST_RELAY = ""
 
 [[d1_databases]]
 binding = "DB"
